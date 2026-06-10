@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Diario" />
+  <meta name="theme-color" content="#F7F2E9" />
+  <title>Diario</title>
+
+  <link rel="apple-touch-icon" href="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%23F7F2E9'/%3E%3Ctext x='50%25' y='52%25' font-size='110' text-anchor='middle' dominant-baseline='central'%3E📔%3C/text%3E%3C/svg%3E" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50%25' y='50%25' font-size='80' text-anchor='middle' dominant-baseline='central'%3E📔%3C/text%3E%3C/svg%3E" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700;9..144,800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
+  <script crossorigin src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #F7F2E9;
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      color: #2A2620;
+      -webkit-tap-highlight-color: transparent;
+      overscroll-behavior-y: contain;
+    }
+    .display { font-family: 'Fraunces', Georgia, serif; font-optical-sizing: auto; }
+    .num { font-variant-numeric: tabular-nums; }
+    input[type="number"]::-webkit-outer-spin-button,
+    input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type="number"] { -moz-appearance: textfield; }
+    /* prevent iOS auto-zoom on focus */
+    input, textarea, select { font-size: 16px; }
+    .scroll-x::-webkit-scrollbar { display: none; }
+    @keyframes flashin {
+      0% { opacity: 0; transform: translateY(8px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+    .flash { animation: flashin 0.25s ease-out; }
+    /* loading state before React mounts */
+    #root:empty::before {
+      content: 'Cargando…';
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      color: #8B7E6A;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" data-presets="react">
+    const { useState, useEffect, useMemo, useRef, useCallback } = React;
+    const {
+      LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
+      CartesianGrid, AreaChart, Area, ReferenceLine, BarChart, Bar
+    } = Recharts;
+
+    /* ---------------- Icons (inline SVG) ---------------- */
+    const SVG = ({ size = 18, strokeWidth = 2, children }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">{children}</svg>
+    );
+    const ChevronLeft = (p) => <SVG {...p}><path d="m15 18-6-6 6-6"/></SVG>;
+    const ChevronRight = (p) => <SVG {...p}><path d="m9 18 6-6-6-6"/></SVG>;
+    const ChevronDown = (p) => <SVG {...p}><path d="m6 9 6 6 6-6"/></SVG>;
+    const Plus = (p) => <SVG {...p}><path d="M5 12h14"/><path d="M12 5v14"/></SVG>;
+    const Minus = (p) => <SVG {...p}><path d="M5 12h14"/></SVG>;
+    const Check = (p) => <SVG {...p}><path d="M20 6 9 17l-5-5"/></SVG>;
+    const Download = (p) => <SVG {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></SVG>;
+    const Upload = (p) => <SVG {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></SVG>;
+    const Home = (p) => <SVG {...p}><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></SVG>;
+    const TrendingUp = (p) => <SVG {...p}><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></SVG>;
+    const CalendarDays = (p) => <SVG {...p}><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></SVG>;
+    const Beer = (p) => <SVG {...p}><path d="M17 11h1a3 3 0 0 1 0 6h-1"/><path d="M9 12v6"/><path d="M13 12v6"/><path d="M14 7.5c-1 0-1.44.5-3 .5s-2-.5-3-.5-1.72.5-2.5.5a2.5 2.5 0 0 1 0-5c.78 0 1.57.5 2.5.5C9.44 3.5 10 3 11.5 3s2 .5 3 .5 1.72-.5 2.5-.5a2.5 2.5 0 0 1 0 5c-.78 0-1.5-.5-2.5-.5Z"/><path d="M5 8v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8"/></SVG>;
+    const Cookie = (p) => <SVG {...p}><path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5"/><path d="M8.5 8.5v.01"/><path d="M16 15.5v.01"/><path d="M12 12v.01"/><path d="M11 17v.01"/><path d="M7 14v.01"/></SVG>;
+    const Apple = (p) => <SVG {...p}><path d="M12 20.94c1.5 0 2.75 1.06 4 1.06 3 0 6-8 6-12.22A4.91 4.91 0 0 0 17 5c-2.22 0-4 1.44-5 2-1-.56-2.78-2-5-2a4.9 4.9 0 0 0-5 4.78C2 14 5 22 8 22c1.25 0 2.5-1.06 4-1.06Z"/><path d="M10 2c1 .5 2 2 2 5"/></SVG>;
+    const Utensils = (p) => <SVG {...p}><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></SVG>;
+    const UtensilsCrossed = (p) => <SVG {...p}><path d="m16 2-2.3 2.3a3 3 0 0 0 0 4.2l1.8 1.8a3 3 0 0 0 4.2 0L22 8"/><path d="M15 15 3.3 3.3a4.2 4.2 0 0 0 0 6l7.3 7.3c.7.7 2 .7 2.8 0L15 15Zm0 0 7 7"/><path d="m2.1 21.8 6.4-6.3"/><path d="m19 5-7 7"/></SVG>;
+    const Footprints = (p) => <SVG {...p}><path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z"/><path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z"/><path d="M16 17h4"/><path d="M4 13h4"/></SVG>;
+    const Activity = (p) => <SVG {...p}><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.5.5 0 0 1-.96 0L9.68 3.18a.5.5 0 0 0-.96 0l-2.35 8.36A2 2 0 0 1 4.45 13H2"/></SVG>;
+    const Moon = (p) => <SVG {...p}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></SVG>;
+    const Dumbbell = (p) => <SVG {...p}><path d="m6.5 6.5 11 11"/><path d="m21 21-1-1"/><path d="m3 3 1 1"/><path d="m18 22 4-4"/><path d="m2 6 4-4"/><path d="m3 10 7-7"/><path d="m14 21 7-7"/></SVG>;
+    const Trash2 = (p) => <SVG {...p}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></SVG>;
+    const Flame = (p) => <SVG {...p}><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></SVG>;
+
+    /* ---------------- LocalStorage adapter ---------------- */
+    const storage = {
+      async get(key) {
+        try {
+          const v = localStorage.getItem(key);
+          if (v === null) return null;
+          return { key, value: v };
+        } catch (e) { return null; }
+      },
+      async set(key, value) {
+        try {
+          localStorage.setItem(key, value);
+          return { key, value };
+        } catch (e) {
+          console.error('localStorage set failed:', e);
+          return null;
+        }
+      }
+    };
+
+    const ALL_KEY = 'diario:allDays';
+
+    /* ---------------- Helpers ---------------- */
+    const toDateString = (d) => [
+      d.getFullYear(),
+      String(d.getMonth() + 1).padStart(2, '0'),
+      String(d.getDate()).padStart(2, '0')
+    ].join('-');
+    const todayStr = () => toDateString(new Date());
+    const addDays = (dateStr, n) => {
+      const d = new Date(dateStr + 'T00:00:00');
+      d.setDate(d.getDate() + n);
+      return toDateString(d);
+    };
+    const daysBetween = (a, b) => {
+      const da = new Date(a + 'T00:00:00');
+      const db = new Date(b + 'T00:00:00');
+      return Math.round((db - da) / 86400000);
+    };
+
+    const DIAS = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+    const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    const formatLongDate = (dateStr) => {
+      const d = new Date(dateStr + 'T00:00:00');
+      return `${DIAS[d.getDay()]}, ${d.getDate()} ${MESES[d.getMonth()]}`;
+    };
+    const formatShortDate = (dateStr) => {
+      const d = new Date(dateStr + 'T00:00:00');
+      return `${d.getDate()} ${MESES[d.getMonth()].slice(0,3)}`;
+    };
+
+    const EMPTY_DAY = {
+      weight: '', bodyFat: '', beers: 0, sweets: 0, fastingHours: 0, fruit: 0,
+      healthyMeals: 0, unhealthyMeals: 0, kmWalked: '', kmRun: '',
+      training: false, sleepHours: '', mood: null, notes: ''
+    };
+
+    const MOODS = [
+      { emoji: '😞', label: 'Mal' },
+      { emoji: '😕', label: 'Flojo' },
+      { emoji: '😐', label: 'Normal' },
+      { emoji: '🙂', label: 'Bien' },
+      { emoji: '😄', label: 'Genial' }
+    ];
+
+    const FASTING_PRESETS = [0, 12, 14, 16, 18, 24];
+
+    /* ---------------- Plan & objetivos ---------------- */
+    const PLAN = {
+      start: { date: '2026-05-27', weight: 101.5, bodyFat: 24.5, label: 'Inicio' },
+      aug1:  { date: '2026-08-01', weight: 93.0,  bodyFat: 20.0, label: 'Fin fase potente' },
+      sep1:  { date: '2026-09-01', weight: 94.0,  bodyFat: 21.0, label: 'Vuelta de verano' },
+      end:   { date: '2026-12-31', weight: 88.0,  bodyFat: 16.0, label: 'Objetivo final' }
+    };
+    const PHASE_INFO = {
+      potente:      { label: 'Fase potente',  hint: 'déficit fuerte, -800 kcal',     color: '#C2410C', emoji: '🔥' },
+      descanso:     { label: 'Descanso agosto', hint: 'mantenimiento, vacaciones',   color: '#8B7E6A', emoji: '🌴' },
+      continuacion: { label: 'Continuación',  hint: 'déficit sostenible, -500 kcal', color: '#5C7C5A', emoji: '🎯' },
+      pre:          { label: 'Antes del plan', hint: '', color: '#8B7E6A', emoji: '·' },
+      end:          { label: 'Objetivo logrado', hint: '', color: '#5C7C5A', emoji: '✓' }
+    };
+    const lerp = (a, b, t) => a + (b - a) * t;
+    function getTarget(dateStr) {
+      if (dateStr < PLAN.start.date) return { weight: PLAN.start.weight, bodyFat: PLAN.start.bodyFat, phase: 'pre' };
+      if (dateStr >= PLAN.end.date) return { weight: PLAN.end.weight, bodyFat: PLAN.end.bodyFat, phase: 'end' };
+      let from, to, phase;
+      if (dateStr < PLAN.aug1.date) { from = PLAN.start; to = PLAN.aug1; phase = 'potente'; }
+      else if (dateStr < PLAN.sep1.date) { from = PLAN.aug1; to = PLAN.sep1; phase = 'descanso'; }
+      else { from = PLAN.sep1; to = PLAN.end; phase = 'continuacion'; }
+      const total = daysBetween(from.date, to.date);
+      const elapsed = daysBetween(from.date, dateStr);
+      const t = total === 0 ? 0 : elapsed / total;
+      return { weight: lerp(from.weight, to.weight, t), bodyFat: lerp(from.bodyFat, to.bodyFat, t), phase };
+    }
+    function daysUntilNextMilestone(dateStr) {
+      const milestones = [PLAN.aug1, PLAN.sep1, PLAN.end];
+      for (const m of milestones) {
+        if (dateStr < m.date) return { date: m.date, days: daysBetween(dateStr, m.date), label: m.label };
+      }
+      return null;
+    }
+
+    /* ---------------- App ---------------- */
+    function App() {
+      const [allDays, setAllDays] = useState({});
+      const [loaded, setLoaded] = useState(false);
+      const [tab, setTab] = useState('hoy');
+      const [currentDate, setCurrentDate] = useState(todayStr());
+      const [savedFlash, setSavedFlash] = useState(false);
+      const saveTimer = useRef(null);
+
+      useEffect(() => {
+        (async () => {
+          try {
+            const res = await storage.get(ALL_KEY);
+            if (res && res.value) setAllDays(JSON.parse(res.value));
+          } catch (e) {}
+          setLoaded(true);
+        })();
+      }, []);
+
+      const queueSave = useCallback((data) => {
+        if (saveTimer.current) clearTimeout(saveTimer.current);
+        saveTimer.current = setTimeout(async () => {
+          try {
+            await storage.set(ALL_KEY, JSON.stringify(data));
+            setSavedFlash(true);
+            setTimeout(() => setSavedFlash(false), 1200);
+          } catch (e) { console.error('Save failed', e); }
+        }, 600);
+      }, []);
+
+      const currentDay = useMemo(() => ({ ...EMPTY_DAY, ...(allDays[currentDate] || {}) }), [allDays, currentDate]);
+
+      const updateField = (field, value) => {
+        const updated = { ...allDays, [currentDate]: { ...currentDay, [field]: value } };
+        setAllDays(updated);
+        queueSave(updated);
+      };
+
+      const deleteDay = (date) => {
+        const updated = { ...allDays };
+        delete updated[date];
+        setAllDays(updated);
+        queueSave(updated);
+      };
+
+      const streak = useMemo(() => {
+        let count = 0;
+        let cursor = todayStr();
+        const isLogged = (d) => {
+          const x = allDays[d];
+          if (!x) return false;
+          return (x.weight !== '' && x.weight != null) ||
+                 x.mood != null ||
+                 x.beers > 0 || x.sweets > 0 || x.fruit > 0 ||
+                 x.healthyMeals > 0 || x.unhealthyMeals > 0 ||
+                 (x.kmWalked !== '' && x.kmWalked != null && Number(x.kmWalked) > 0) ||
+                 (x.kmRun !== '' && x.kmRun != null && Number(x.kmRun) > 0) ||
+                 x.training === true ||
+                 (x.sleepHours !== '' && x.sleepHours != null) ||
+                 x.fastingHours > 0;
+        };
+        if (!isLogged(cursor)) cursor = addDays(cursor, -1);
+        while (isLogged(cursor)) { count++; cursor = addDays(cursor, -1); }
+        return count;
+      }, [allDays]);
+
+      const isToday = currentDate === todayStr();
+      const isFuture = currentDate > todayStr();
+
+      return (
+        <div className="min-h-screen w-full" style={{
+          background: 'linear-gradient(180deg, #F7F2E9 0%, #F2EBDC 100%)',
+          color: '#2A2620'
+        }}>
+          <header className="px-5 pt-12 pb-3" style={{ paddingTop: 'max(3rem, env(safe-area-inset-top))' }}>
+            <div className="flex items-center justify-between mb-1">
+              <h1 className="display text-3xl font-bold tracking-tight">Diario</h1>
+              <div className="flex items-center gap-2">
+                {savedFlash && (
+                  <span className="flash text-xs flex items-center gap-1 px-2 py-1 rounded-full"
+                        style={{ background: '#E8E0CD', color: '#5C7C5A' }}>
+                    <Check size={12} strokeWidth={3} /> guardado
+                  </span>
+                )}
+                <div className="flex items-center gap-1 px-3 py-1.5 rounded-full"
+                     style={{ background: '#2A2620', color: '#F7F2E9' }}>
+                  <Flame size={14} strokeWidth={2.5} />
+                  <span className="text-sm font-semibold num">{streak}</span>
+                </div>
+              </div>
+            </div>
+            <p className="text-sm" style={{ color: '#8B7E6A' }}>
+              {tab === 'hoy' && 'Tu seguimiento diario'}
+              {tab === 'tendencias' && 'Cómo vas evolucionando'}
+              {tab === 'historial' && 'Todos tus días'}
+            </p>
+          </header>
+
+          <main className="px-5 pb-32">
+            {!loaded ? (
+              <div className="flex items-center justify-center py-20">
+                <div className="text-sm" style={{ color: '#8B7E6A' }}>Cargando…</div>
+              </div>
+            ) : tab === 'hoy' ? (
+              <TodayView date={currentDate} setDate={setCurrentDate} day={currentDay}
+                         update={updateField} isToday={isToday} isFuture={isFuture} />
+            ) : tab === 'tendencias' ? (
+              <TrendsView allDays={allDays} />
+            ) : (
+              <HistoryView allDays={allDays}
+                           onSelectDate={(d) => { setCurrentDate(d); setTab('hoy'); }}
+                           onDelete={deleteDay} />
+            )}
+          </main>
+
+          <nav className="fixed bottom-0 left-0 right-0 px-5 pt-3"
+               style={{
+                 background: 'linear-gradient(180deg, rgba(247,242,233,0) 0%, rgba(247,242,233,0.95) 30%, rgba(247,242,233,1) 100%)',
+                 paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))'
+               }}>
+            <div className="flex items-center justify-around rounded-full py-2.5 px-2 max-w-md mx-auto"
+                 style={{ background: '#2A2620', boxShadow: '0 8px 24px rgba(42,38,32,0.25)' }}>
+              <NavBtn icon={<Home size={18} strokeWidth={2.5} />} label="Hoy" active={tab === 'hoy'} onClick={() => setTab('hoy')} />
+              <NavBtn icon={<TrendingUp size={18} strokeWidth={2.5} />} label="Tendencias" active={tab === 'tendencias'} onClick={() => setTab('tendencias')} />
+              <NavBtn icon={<CalendarDays size={18} strokeWidth={2.5} />} label="Historial" active={tab === 'historial'} onClick={() => setTab('historial')} />
+            </div>
+          </nav>
+        </div>
+      );
+    }
+
+    /* ---------------- Today view ---------------- */
+    function TodayView({ date, setDate, day, update, isToday, isFuture }) {
+      return (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between rounded-2xl p-2"
+               style={{ background: '#FFFFFF', boxShadow: '0 1px 3px rgba(42,38,32,0.06)' }}>
+            <button onClick={() => setDate(addDays(date, -1))}
+                    className="p-2 rounded-xl transition active:scale-95"
+                    style={{ background: '#F2EBDC' }}>
+              <ChevronLeft size={20} strokeWidth={2.5} />
+            </button>
+            <div className="text-center flex-1">
+              <div className="display text-lg font-semibold capitalize">
+                {isToday ? 'Hoy' : formatLongDate(date)}
+              </div>
+              {!isToday && (
+                <button onClick={() => setDate(todayStr())}
+                        className="text-xs underline mt-0.5" style={{ color: '#C2410C' }}>
+                  volver a hoy
+                </button>
+              )}
+            </div>
+            <button onClick={() => setDate(addDays(date, 1))}
+                    disabled={isFuture}
+                    className="p-2 rounded-xl transition active:scale-95 disabled:opacity-30"
+                    style={{ background: '#F2EBDC' }}>
+              <ChevronRight size={20} strokeWidth={2.5} />
+            </button>
+          </div>
+
+          <PlanCard date={date} day={day} />
+
+          <Card>
+            <SectionHeader title="Báscula" hint="Apple Health / Withings" />
+            <div className="grid grid-cols-2 gap-3">
+              <BigNumberInput label="Peso" value={day.weight} unit="kg" step={0.1} placeholder="—"
+                onChange={(v) => update('weight', v)}
+                target={getTarget(date).weight} targetUnit="kg" lowerIsBetter />
+              <BigNumberInput label="% grasa" value={day.bodyFat} unit="%" step={0.1} placeholder="—"
+                onChange={(v) => update('bodyFat', v)}
+                target={getTarget(date).bodyFat} targetUnit="%" lowerIsBetter />
+            </div>
+          </Card>
+
+          <Card>
+            <SectionHeader title="Sensación del día" />
+            <div className="flex justify-between items-center gap-1">
+              {MOODS.map((m, i) => {
+                const active = day.mood === i + 1;
+                return (
+                  <button key={i}
+                    onClick={() => update('mood', active ? null : i + 1)}
+                    className="flex-1 flex flex-col items-center gap-1 py-2 rounded-xl transition active:scale-95"
+                    style={{ background: active ? '#2A2620' : 'transparent', color: active ? '#F7F2E9' : '#2A2620' }}>
+                    <span className="text-3xl" style={{ filter: active ? 'none' : 'grayscale(0.3)' }}>{m.emoji}</span>
+                    <span className="text-[10px] font-medium opacity-80">{m.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </Card>
+
+          <Card>
+            <SectionHeader title="Comida & bebida" />
+            <div className="space-y-2">
+              <CounterRow icon={<Beer size={18} />} label="Cervezas" value={day.beers} onChange={(v) => update('beers', v)} />
+              <CounterRow icon={<Cookie size={18} />} label="Dulces / picoteo" value={day.sweets} onChange={(v) => update('sweets', v)} />
+              <CounterRow icon={<Apple size={18} />} label="Piezas de fruta" value={day.fruit} onChange={(v) => update('fruit', v)} accent="#5C7C5A" />
+              <CounterRow icon={<Utensils size={18} />} label="Platos saludables" value={day.healthyMeals} onChange={(v) => update('healthyMeals', v)} accent="#5C7C5A" max={5} />
+              <CounterRow icon={<UtensilsCrossed size={18} />} label="Platos NO saludables" value={day.unhealthyMeals} onChange={(v) => update('unhealthyMeals', v)} accent="#C2410C" max={5} />
+            </div>
+          </Card>
+
+          <Card>
+            <SectionHeader title="Ayuno" />
+            <div className="flex items-center gap-2 overflow-x-auto scroll-x pb-1">
+              {FASTING_PRESETS.map((h) => {
+                const active = day.fastingHours === h;
+                return (
+                  <button key={h}
+                    onClick={() => update('fastingHours', h)}
+                    className="px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition active:scale-95"
+                    style={{ background: active ? '#2A2620' : '#F2EBDC', color: active ? '#F7F2E9' : '#2A2620' }}>
+                    {h === 0 ? 'no' : `${h}h`}
+                  </button>
+                );
+              })}
+            </div>
+          </Card>
+
+          <Card>
+            <SectionHeader title="Actividad" />
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <BigNumberInput label="Km andados" value={day.kmWalked} unit="km" step={0.5} placeholder="0"
+                icon={<Footprints size={14} strokeWidth={2.5} />} onChange={(v) => update('kmWalked', v)} />
+              <BigNumberInput label="Km corridos" value={day.kmRun} unit="km" step={0.5} placeholder="0"
+                icon={<Activity size={14} strokeWidth={2.5} />} onChange={(v) => update('kmRun', v)} />
+            </div>
+            <button
+              onClick={() => update('training', !day.training)}
+              className="w-full flex items-center justify-between p-3 rounded-2xl transition active:scale-[0.98]"
+              style={{ background: day.training ? '#2A2620' : '#F2EBDC', color: day.training ? '#F7F2E9' : '#2A2620' }}>
+              <span className="flex items-center gap-2 font-medium">
+                <Dumbbell size={18} strokeWidth={2.2} />
+                Sesión de entrenamiento
+              </span>
+              <span className="text-sm font-semibold">{day.training ? '✓ Hecho' : 'No'}</span>
+            </button>
+          </Card>
+
+          <Card>
+            <SectionHeader title="Sueño" />
+            <BigNumberInput label="Horas dormidas" value={day.sleepHours} unit="h" step={0.25} placeholder="—"
+              icon={<Moon size={14} strokeWidth={2.5} />} onChange={(v) => update('sleepHours', v)} full />
+          </Card>
+
+          <Card>
+            <SectionHeader title="Nota libre" hint="opcional" />
+            <textarea
+              value={day.notes}
+              onChange={(e) => update('notes', e.target.value)}
+              placeholder="Lo que quieras recordar de este día…"
+              rows={2}
+              className="w-full p-3 rounded-xl resize-none focus:outline-none"
+              style={{ background: '#F2EBDC', color: '#2A2620', border: 'none', fontSize: '15px' }}
+            />
+          </Card>
+        </div>
+      );
+    }
+
+    /* ---------------- Trends view ---------------- */
+    function TrendsView({ allDays }) {
+      const [range, setRange] = useState(30);
+
+      const series = useMemo(() => {
+        const out = [];
+        for (let i = range - 1; i >= 0; i--) {
+          const d = addDays(todayStr(), -i);
+          const data = allDays[d] || {};
+          const target = getTarget(d);
+          out.push({
+            date: d,
+            label: formatShortDate(d),
+            weight: data.weight !== '' && data.weight != null ? Number(data.weight) : null,
+            bodyFat: data.bodyFat !== '' && data.bodyFat != null ? Number(data.bodyFat) : null,
+            targetWeight: target.weight,
+            targetBodyFat: target.bodyFat,
+            mood: data.mood || null,
+            sleep: data.sleepHours !== '' && data.sleepHours != null ? Number(data.sleepHours) : null,
+            beers: Number(data.beers || 0),
+            sweets: Number(data.sweets || 0),
+            fruit: Number(data.fruit || 0),
+            kmTotal: Number(data.kmWalked || 0) + Number(data.kmRun || 0),
+            training: data.training ? 1 : 0
+          });
+        }
+        return out;
+      }, [allDays, range]);
+
+      const stats = useMemo(() => {
+        const withWeight = series.filter(x => x.weight != null);
+        const withFat = series.filter(x => x.bodyFat != null);
+        const withSleep = series.filter(x => x.sleep != null);
+        const withMood = series.filter(x => x.mood != null);
+        const avg = (arr, key) => arr.length === 0 ? null : arr.reduce((s, x) => s + x[key], 0) / arr.length;
+        const sum = (key) => series.reduce((s, x) => s + (x[key] || 0), 0);
+        const weightDelta = withWeight.length >= 2 ? withWeight[withWeight.length - 1].weight - withWeight[0].weight : null;
+        const fatDelta = withFat.length >= 2 ? withFat[withFat.length - 1].bodyFat - withFat[0].bodyFat : null;
+        return {
+          weightDelta, fatDelta,
+          avgSleep: avg(withSleep, 'sleep'),
+          avgMood: avg(withMood, 'mood'),
+          totalBeers: sum('beers'), totalSweets: sum('sweets'), totalFruit: sum('fruit'),
+          totalKm: sum('kmTotal'), totalTraining: sum('training'),
+          daysLogged: series.filter(x =>
+            x.weight != null || x.mood != null || x.beers > 0 || x.sweets > 0 ||
+            x.fruit > 0 || x.kmTotal > 0 || x.sleep != null || x.training === 1
+          ).length
+        };
+      }, [series]);
+
+      const weightSeries = series.filter(x => x.weight != null);
+      const fatSeries = series.filter(x => x.bodyFat != null);
+
+      return (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            {[7, 30, 90].map(r => (
+              <button key={r} onClick={() => setRange(r)}
+                className="px-4 py-2 rounded-full text-sm font-medium transition active:scale-95"
+                style={{ background: range === r ? '#2A2620' : '#FFFFFF', color: range === r ? '#F7F2E9' : '#2A2620',
+                         boxShadow: range === r ? 'none' : '0 1px 3px rgba(42,38,32,0.06)' }}>
+                {r}d
+              </button>
+            ))}
+          </div>
+
+          <Card>
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <div className="display text-lg font-semibold">Peso</div>
+                <div className="text-xs" style={{ color: '#8B7E6A' }}>
+                  {weightSeries.length === 0 ? 'Sin datos en el rango'
+                    : `${weightSeries.length} mediciones · ${weightSeries[weightSeries.length-1].weight.toFixed(1)} kg`}
+                </div>
+              </div>
+              {stats.weightDelta != null && <DeltaPill value={stats.weightDelta} unit="kg" lowerIsBetter />}
+            </div>
+            <div className="h-44 -mx-2">
+              {weightSeries.length >= 2 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={series} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="wgrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#C2410C" stopOpacity={0.25} />
+                        <stop offset="100%" stopColor="#C2410C" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid stroke="#E8E0CD" strokeDasharray="2 4" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#8B7E6A' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                    <YAxis domain={['dataMin - 0.5', 'dataMax + 0.5']} tick={{ fontSize: 10, fill: '#8B7E6A' }} tickLine={false} axisLine={false} width={30} />
+                    <Tooltip content={<MiniTooltip unit="kg" withTarget />} />
+                    <Line type="monotone" dataKey="targetWeight" stroke="#8B7E6A" strokeWidth={1.5} strokeDasharray="4 4" dot={false} isAnimationActive={false} />
+                    <Area type="monotone" dataKey="weight" stroke="#C2410C" strokeWidth={2.5} fill="url(#wgrad)" dot={{ fill: '#C2410C', r: 3 }} connectNulls />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : <EmptyChart text="Pésate varios días para ver la curva" />}
+            </div>
+            <div className="flex items-center gap-3 text-[10px] mt-1" style={{ color: '#8B7E6A' }}>
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5" style={{ background: '#C2410C' }} /> Tu peso</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 border-t border-dashed" style={{ borderColor: '#8B7E6A' }} /> Objetivo plan</span>
+            </div>
+          </Card>
+
+          <Card>
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <div className="display text-lg font-semibold">% grasa corporal</div>
+                <div className="text-xs" style={{ color: '#8B7E6A' }}>
+                  {fatSeries.length === 0 ? 'Sin datos en el rango'
+                    : `${fatSeries.length} mediciones · ${fatSeries[fatSeries.length-1].bodyFat.toFixed(1)}%`}
+                </div>
+              </div>
+              {stats.fatDelta != null && <DeltaPill value={stats.fatDelta} unit="%" lowerIsBetter />}
+            </div>
+            <div className="h-44 -mx-2">
+              {fatSeries.length >= 2 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={series} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="fgrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#5C7C5A" stopOpacity={0.25} />
+                        <stop offset="100%" stopColor="#5C7C5A" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid stroke="#E8E0CD" strokeDasharray="2 4" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#8B7E6A' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                    <YAxis domain={['dataMin - 0.3', 'dataMax + 0.3']} tick={{ fontSize: 10, fill: '#8B7E6A' }} tickLine={false} axisLine={false} width={30} />
+                    <Tooltip content={<MiniTooltip unit="%" withTarget />} />
+                    <Line type="monotone" dataKey="targetBodyFat" stroke="#8B7E6A" strokeWidth={1.5} strokeDasharray="4 4" dot={false} isAnimationActive={false} />
+                    <Area type="monotone" dataKey="bodyFat" stroke="#5C7C5A" strokeWidth={2.5} fill="url(#fgrad)" dot={{ fill: '#5C7C5A', r: 3 }} connectNulls />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : <EmptyChart text="Mide tu % grasa varios días" />}
+            </div>
+            <div className="flex items-center gap-3 text-[10px] mt-1" style={{ color: '#8B7E6A' }}>
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5" style={{ background: '#5C7C5A' }} /> Tu % grasa</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 border-t border-dashed" style={{ borderColor: '#8B7E6A' }} /> Objetivo plan</span>
+            </div>
+          </Card>
+
+          <div className="grid grid-cols-2 gap-3">
+            <StatCard label="Días registrados" value={stats.daysLogged} suffix={`/${range}`} />
+            <StatCard label="Sensación media" value={stats.avgMood != null ? MOODS[Math.round(stats.avgMood)-1]?.emoji : '—'} isEmoji />
+            <StatCard label="Sueño medio" value={stats.avgSleep != null ? stats.avgSleep.toFixed(1) : '—'} suffix="h" />
+            <StatCard label="Entrenamientos" value={stats.totalTraining} />
+            <StatCard label="Km totales" value={stats.totalKm.toFixed(1)} />
+            <StatCard label="Fruta total" value={stats.totalFruit} />
+            <StatCard label="Cervezas" value={stats.totalBeers} accent="#C2410C" />
+            <StatCard label="Picoteo" value={stats.totalSweets} accent="#C2410C" />
+          </div>
+
+          <Card>
+            <SectionHeader title="Sueño por día" />
+            <div className="h-32 -mx-2">
+              {series.some(x => x.sleep != null) ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={series} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+                    <CartesianGrid stroke="#E8E0CD" strokeDasharray="2 4" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 9, fill: '#8B7E6A' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                    <YAxis tick={{ fontSize: 10, fill: '#8B7E6A' }} tickLine={false} axisLine={false} width={25} />
+                    <Tooltip content={<MiniTooltip unit="h" />} />
+                    <ReferenceLine y={7} stroke="#5C7C5A" strokeDasharray="3 3" />
+                    <Bar dataKey="sleep" fill="#2A2620" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : <EmptyChart text="Sin datos de sueño" />}
+            </div>
+          </Card>
+
+          <ExportCard allDays={allDays} />
+        </div>
+      );
+    }
+
+    /* ---------------- History view ---------------- */
+    function HistoryView({ allDays, onSelectDate, onDelete }) {
+      const dates = useMemo(() => Object.keys(allDays).sort((a, b) => b.localeCompare(a)), [allDays]);
+
+      if (dates.length === 0) {
+        return (
+          <Card>
+            <div className="text-center py-8">
+              <div className="text-4xl mb-2">📔</div>
+              <div className="display text-lg font-semibold mb-1">Aún sin entradas</div>
+              <div className="text-sm" style={{ color: '#8B7E6A' }}>Empieza registrando el día de hoy.</div>
+            </div>
+          </Card>
+        );
+      }
+
+      return (
+        <div className="space-y-2">
+          {dates.map(date => {
+            const d = allDays[date];
+            return (
+              <button key={date} onClick={() => onSelectDate(date)}
+                className="w-full text-left rounded-2xl p-4 transition active:scale-[0.99]"
+                style={{ background: '#FFFFFF', boxShadow: '0 1px 3px rgba(42,38,32,0.06)' }}>
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <div className="display text-base font-semibold capitalize">
+                      {date === todayStr() ? 'Hoy' : formatLongDate(date)}
+                    </div>
+                    <div className="text-xs num" style={{ color: '#8B7E6A' }}>{date}</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {d.mood && <span className="text-2xl">{MOODS[d.mood - 1].emoji}</span>}
+                    <span onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm(`¿Borrar ${date}?`)) onDelete(date);
+                      }}
+                      className="p-1.5 rounded-lg opacity-40 hover:opacity-100 cursor-pointer"
+                      style={{ background: '#F2EBDC' }}>
+                      <Trash2 size={14} />
+                    </span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-1.5 text-xs">
+                  {d.weight && <Chip label={`${d.weight} kg`} />}
+                  {d.bodyFat && <Chip label={`${d.bodyFat}%`} accent="#5C7C5A" />}
+                  {d.beers > 0 && <Chip label={`🍺 ${d.beers}`} accent="#C2410C" />}
+                  {d.sweets > 0 && <Chip label={`🍪 ${d.sweets}`} accent="#C2410C" />}
+                  {d.fruit > 0 && <Chip label={`🍎 ${d.fruit}`} accent="#5C7C5A" />}
+                  {d.fastingHours > 0 && <Chip label={`Ayuno ${d.fastingHours}h`} />}
+                  {d.healthyMeals > 0 && <Chip label={`✓${d.healthyMeals}`} accent="#5C7C5A" />}
+                  {d.unhealthyMeals > 0 && <Chip label={`✗${d.unhealthyMeals}`} accent="#C2410C" />}
+                  {(d.kmWalked > 0 || d.kmRun > 0) &&
+                    <Chip label={`${(Number(d.kmWalked||0) + Number(d.kmRun||0)).toFixed(1)} km`} />}
+                  {d.training && <Chip label="💪 Entreno" />}
+                  {d.sleepHours && <Chip label={`😴 ${d.sleepHours}h`} />}
+                </div>
+                {d.notes && (
+                  <div className="text-xs italic mt-2 pt-2 border-t" style={{ color: '#8B7E6A', borderColor: '#F2EBDC' }}>
+                    "{d.notes}"
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      );
+    }
+
+    /* ---------------- Building blocks ---------------- */
+    function Card({ children }) {
+      return (
+        <div className="rounded-2xl p-4" style={{ background: '#FFFFFF', boxShadow: '0 1px 3px rgba(42,38,32,0.06)' }}>
+          {children}
+        </div>
+      );
+    }
+
+    function SectionHeader({ title, hint }) {
+      return (
+        <div className="flex items-baseline justify-between mb-3">
+          <h2 className="display text-base font-semibold tracking-tight">{title}</h2>
+          {hint && <span className="text-[10px] uppercase tracking-wider" style={{ color: '#8B7E6A' }}>{hint}</span>}
+        </div>
+      );
+    }
+
+    function PlanCard({ date, day }) {
+      const target = getTarget(date);
+      const info = PHASE_INFO[target.phase];
+      const next = daysUntilNextMilestone(date);
+      const totalDays = daysBetween(PLAN.start.date, PLAN.end.date);
+      const elapsed = Math.max(0, Math.min(totalDays, daysBetween(PLAN.start.date, date)));
+      const progress = totalDays === 0 ? 0 : (elapsed / totalDays) * 100;
+      const aug1Pct = (daysBetween(PLAN.start.date, PLAN.aug1.date) / totalDays) * 100;
+      const sep1Pct = (daysBetween(PLAN.start.date, PLAN.sep1.date) / totalDays) * 100;
+      const weightVal = day.weight !== '' && day.weight != null ? Number(day.weight) : null;
+      const fatVal = day.bodyFat !== '' && day.bodyFat != null ? Number(day.bodyFat) : null;
+
+      return (
+        <div className="rounded-2xl overflow-hidden" style={{
+          background: '#2A2620', color: '#F7F2E9',
+          boxShadow: '0 8px 24px rgba(42,38,32,0.18)'
+        }}>
+          <div className="p-4">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <div className="text-[10px] uppercase tracking-wider opacity-60 mb-0.5">Plan en curso</div>
+                <div className="display text-lg font-semibold flex items-center gap-2">
+                  <span style={{ color: info.color }}>{info.emoji}</span>
+                  {info.label}
+                </div>
+                {info.hint && <div className="text-xs opacity-60 mt-0.5">{info.hint}</div>}
+              </div>
+              {next && (
+                <div className="text-right">
+                  <div className="text-[10px] uppercase tracking-wider opacity-60">Faltan</div>
+                  <div className="display text-xl font-bold num">{next.days}<span className="text-xs font-medium opacity-70 ml-0.5">d</span></div>
+                  <div className="text-[10px] opacity-50">{next.label.toLowerCase()}</div>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <div className="rounded-xl p-2.5" style={{ background: 'rgba(247,242,233,0.08)' }}>
+                <div className="text-[10px] uppercase tracking-wider opacity-50 mb-0.5">Objetivo hoy</div>
+                <div className="flex items-baseline justify-between">
+                  <span className="display text-lg font-bold num">{target.weight.toFixed(1)}<span className="text-xs font-medium opacity-60 ml-0.5">kg</span></span>
+                  {weightVal != null && (
+                    <span className="text-[11px] font-semibold num"
+                          style={{ color: weightVal - target.weight <= 0.3 ? '#9BC499' : '#F4A481' }}>
+                      {weightVal - target.weight > 0 ? '+' : ''}{(weightVal - target.weight).toFixed(1)}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="rounded-xl p-2.5" style={{ background: 'rgba(247,242,233,0.08)' }}>
+                <div className="text-[10px] uppercase tracking-wider opacity-50 mb-0.5">% grasa hoy</div>
+                <div className="flex items-baseline justify-between">
+                  <span className="display text-lg font-bold num">{target.bodyFat.toFixed(1)}<span className="text-xs font-medium opacity-60 ml-0.5">%</span></span>
+                  {fatVal != null && (
+                    <span className="text-[11px] font-semibold num"
+                          style={{ color: fatVal - target.bodyFat <= 0.3 ? '#9BC499' : '#F4A481' }}>
+                      {fatVal - target.bodyFat > 0 ? '+' : ''}{(fatVal - target.bodyFat).toFixed(1)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="relative h-1.5 rounded-full overflow-visible mt-2 mb-1" style={{ background: 'rgba(247,242,233,0.12)' }}>
+              <div className="absolute inset-y-0 left-0 rounded-l-full" style={{ width: `${aug1Pct}%`, background: 'rgba(194,65,12,0.35)' }} />
+              <div className="absolute inset-y-0" style={{ left: `${aug1Pct}%`, width: `${sep1Pct - aug1Pct}%`, background: 'rgba(139,126,106,0.45)' }} />
+              <div className="absolute inset-y-0 rounded-r-full" style={{ left: `${sep1Pct}%`, right: 0, background: 'rgba(92,124,90,0.4)' }} />
+              <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full" style={{
+                left: `calc(${progress}% - 6px)`, background: '#F7F2E9',
+                boxShadow: '0 0 0 2px #2A2620, 0 2px 4px rgba(0,0,0,0.3)'
+              }} />
+            </div>
+            <div className="flex justify-between text-[9px] opacity-50 num">
+              <span>27 may · 101,5 / 24,5</span>
+              <span>1 ago · 93 / 20</span>
+              <span>31 dic · 88 / 16</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function BigNumberInput({ label, value, unit, step = 1, placeholder, icon, full, onChange, target, targetUnit, lowerIsBetter }) {
+      const numValue = value !== '' && value != null ? Number(value) : null;
+      const delta = (target != null && numValue != null) ? numValue - target : null;
+      const onTrack = delta != null ? (lowerIsBetter ? delta <= 0.3 : delta >= -0.3) : null;
+      return (
+        <div className={`rounded-xl p-3 ${full ? 'w-full' : ''}`} style={{ background: '#F2EBDC' }}>
+          <div className="text-[11px] uppercase tracking-wider mb-1 flex items-center gap-1" style={{ color: '#8B7E6A' }}>
+            {icon}{label}
+          </div>
+          <div className="flex items-baseline gap-1">
+            <input type="number" inputMode="decimal" step={step} value={value} placeholder={placeholder}
+              onChange={(e) => onChange(e.target.value)}
+              className="display num bg-transparent border-none focus:outline-none w-full min-w-0"
+              style={{ color: '#2A2620', fontSize: '24px', fontWeight: 700 }} />
+            <span className="text-sm font-medium" style={{ color: '#8B7E6A' }}>{unit}</span>
+          </div>
+          {target != null && (
+            <div className="flex items-center justify-between mt-1 pt-1 border-t" style={{ borderColor: 'rgba(139,126,106,0.2)' }}>
+              <span className="text-[10px] uppercase tracking-wider" style={{ color: '#8B7E6A' }}>
+                obj. {target.toFixed(1)} {targetUnit}
+              </span>
+              {delta != null && (
+                <span className="text-[10px] font-semibold num" style={{ color: onTrack ? '#5C7C5A' : '#C2410C' }}>
+                  {delta > 0 ? '+' : ''}{delta.toFixed(1)}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function CounterRow({ icon, label, value, onChange, accent = '#2A2620', max = 20 }) {
+      const v = Number(value || 0);
+      return (
+        <div className="flex items-center gap-3 py-1.5">
+          <div className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center"
+               style={{ background: '#F2EBDC', color: accent }}>{icon}</div>
+          <div className="flex-1 text-sm font-medium">{label}</div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => onChange(Math.max(0, v - 1))} disabled={v === 0}
+              className="w-8 h-8 rounded-full flex items-center justify-center transition active:scale-95 disabled:opacity-30"
+              style={{ background: '#F2EBDC' }}>
+              <Minus size={14} strokeWidth={2.5} />
+            </button>
+            <span className="display text-lg font-bold num w-6 text-center" style={{ color: v > 0 ? accent : '#8B7E6A' }}>{v}</span>
+            <button onClick={() => onChange(Math.min(max, v + 1))}
+              className="w-8 h-8 rounded-full flex items-center justify-center transition active:scale-95"
+              style={{ background: accent, color: '#F7F2E9' }}>
+              <Plus size={14} strokeWidth={2.8} />
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    function NavBtn({ icon, label, active, onClick }) {
+      return (
+        <button onClick={onClick}
+                className="flex flex-col items-center gap-0.5 py-1.5 px-4 rounded-full transition active:scale-95"
+                style={{ background: active ? '#F7F2E9' : 'transparent', color: active ? '#2A2620' : '#F7F2E9' }}>
+          {icon}
+          <span className="text-[10px] font-semibold">{label}</span>
+        </button>
+      );
+    }
+
+    function StatCard({ label, value, suffix, accent = '#2A2620', isEmoji }) {
+      return (
+        <div className="rounded-2xl p-3" style={{ background: '#FFFFFF', boxShadow: '0 1px 3px rgba(42,38,32,0.06)' }}>
+          <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: '#8B7E6A' }}>{label}</div>
+          <div className="flex items-baseline gap-1">
+            <span className={isEmoji ? 'text-2xl' : 'display text-2xl font-bold num'} style={{ color: accent }}>{value}</span>
+            {suffix && <span className="text-xs font-medium" style={{ color: '#8B7E6A' }}>{suffix}</span>}
+          </div>
+        </div>
+      );
+    }
+
+    function DeltaPill({ value, unit, lowerIsBetter }) {
+      if (value == null) return null;
+      const sign = value > 0 ? '+' : '';
+      const good = lowerIsBetter ? value <= 0 : value >= 0;
+      const color = Math.abs(value) < 0.1 ? '#8B7E6A' : (good ? '#5C7C5A' : '#C2410C');
+      return (
+        <div className="px-2.5 py-1 rounded-full text-xs font-semibold num" style={{ background: color + '20', color }}>
+          {sign}{value.toFixed(1)} {unit}
+        </div>
+      );
+    }
+
+    function Chip({ label, accent = '#2A2620' }) {
+      return (
+        <span className="px-2 py-0.5 rounded-full text-xs font-medium num" style={{ background: accent + '15', color: accent }}>
+          {label}
+        </span>
+      );
+    }
+
+    function MiniTooltip({ active, payload, unit, withTarget }) {
+      if (!active || !payload?.length) return null;
+      const actual = payload.find(p => p.dataKey === 'weight' || p.dataKey === 'bodyFat' || p.dataKey === 'sleep');
+      const target = payload.find(p => p.dataKey === 'targetWeight' || p.dataKey === 'targetBodyFat');
+      const point = payload[0]?.payload || {};
+      return (
+        <div className="rounded-lg px-2.5 py-1.5 text-xs" style={{ background: '#2A2620', color: '#F7F2E9' }}>
+          <div className="opacity-70 text-[10px]">{point.label}</div>
+          {actual && actual.value != null && (
+            <div className="font-bold num">{Number(actual.value).toFixed(1)} {unit}</div>
+          )}
+          {withTarget && target && target.value != null && (
+            <div className="text-[10px] opacity-60 num">obj. {Number(target.value).toFixed(1)} {unit}</div>
+          )}
+        </div>
+      );
+    }
+
+    function EmptyChart({ text }) {
+      return <div className="h-full flex items-center justify-center text-sm" style={{ color: '#8B7E6A' }}>{text}</div>;
+    }
+
+    function ExportCard({ allDays }) {
+      const [showImport, setShowImport] = useState(false);
+      const [importText, setImportText] = useState('');
+
+      const handleExport = () => {
+        const data = JSON.stringify(allDays, null, 2);
+        const blob = new Blob([data], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `diario-${todayStr()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      };
+
+      const handleImport = async () => {
+        try {
+          const parsed = JSON.parse(importText);
+          const merged = { ...allDays, ...parsed };
+          await storage.set(ALL_KEY, JSON.stringify(merged));
+          window.location.reload();
+        } catch (e) { alert('JSON inválido'); }
+      };
+
+      return (
+        <Card>
+          <SectionHeader title="Tus datos" hint="haz backup periódico" />
+          <div className="space-y-2">
+            <button onClick={handleExport}
+              className="w-full flex items-center justify-between p-3 rounded-xl transition active:scale-[0.98]"
+              style={{ background: '#F2EBDC' }}>
+              <span className="flex items-center gap-2 text-sm font-medium">
+                <Download size={16} strokeWidth={2.2} /> Exportar JSON (backup)
+              </span>
+            </button>
+            <button onClick={() => setShowImport(!showImport)}
+              className="w-full flex items-center justify-between p-3 rounded-xl transition active:scale-[0.98]"
+              style={{ background: '#F2EBDC' }}>
+              <span className="flex items-center gap-2 text-sm font-medium">
+                <Upload size={16} strokeWidth={2.2} /> Importar JSON
+              </span>
+              <span style={{ transform: showImport ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                <ChevronDown size={16} />
+              </span>
+            </button>
+            {showImport && (
+              <div className="space-y-2 pt-1">
+                <textarea value={importText} onChange={(e) => setImportText(e.target.value)}
+                  placeholder="Pega aquí el JSON exportado…" rows={4}
+                  className="w-full p-2 rounded-xl font-mono resize-none focus:outline-none"
+                  style={{ background: '#F7F2E9', border: '1px solid #E8E0CD', fontSize: '13px' }} />
+                <button onClick={handleImport} disabled={!importText.trim()}
+                  className="w-full p-2 rounded-xl text-sm font-medium disabled:opacity-40"
+                  style={{ background: '#2A2620', color: '#F7F2E9' }}>
+                  Importar y recargar
+                </button>
+              </div>
+            )}
+          </div>
+        </Card>
+      );
+    }
+
+    /* ---------------- Mount ---------------- */
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
